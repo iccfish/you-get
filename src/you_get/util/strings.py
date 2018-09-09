@@ -26,3 +26,8 @@ def get_filename(htmlstring):
 
 def parameterize(string):
     return "'%s'" % string.replace("'", r"'\''")
+
+import re
+
+def remove_invalid_chars(string):
+    return re.sub(r'[\t\\/:*?"<>|]','',string)

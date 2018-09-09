@@ -14,6 +14,7 @@ from xml.dom.minidom import parseString
 from ..common import *
 from ..util.log import *
 from ..extractor import *
+from ..util.strings import remove_invalid_chars
 
 from .qq import qq_download_by_vid
 from .sina import sina_download_by_vid
@@ -151,6 +152,9 @@ class Bilibili(VideoExtractor):
                         qs = dict(parse.parse_qsl(urllib.parse.urlparse(self.url).query))
                         page = pages[int(qs.get('p', 1)) - 1]
                         self.title = '{} #{}. {}'.format(self.title, page['page'], page['part'])
+
+        if self.title is not None:
+            self.title = remove_invalid_chars(self.title)
 
         if 'bangumi.bilibili.com/movie' in self.url:
             self.movie_entry(**kwargs)

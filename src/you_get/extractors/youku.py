@@ -3,6 +3,7 @@
 
 from ..common import *
 from ..extractor import VideoExtractor
+from ..util.strings import remove_invalid_chars
 
 import time
 import traceback
@@ -189,7 +190,7 @@ class Youku(VideoExtractor):
             else:
                 log.wtf('Unknown error')
 
-        self.title = self.api_data['video']['title']
+        self.title = remove_invalid_chars(self.api_data['video']['title'])
         stream_types = dict([(i['id'], i) for i in self.stream_types])
         audio_lang = self.api_data['stream'][0]['audio_lang']
 
