@@ -23,7 +23,7 @@ from .youku import youku_download_by_vid
 
 class Bilibili(VideoExtractor):
     name = 'Bilibili'
-    live_api = 'http://live.bilibili.com/api/playurl?cid={}&otype=json'
+    live_api = 'https://api.live.bilibili.com/room/v1/Room/playUrl?cid={}&quality=0&platform=web'
     api_url = 'http://interface.bilibili.com/v2/playurl?'
     bangumi_api_url = 'http://bangumi.bilibili.com/player/web_api/playurl?'
     live_room_init_api_url = 'https://api.live.bilibili.com/room/v1/Room/room_init?id={}'
@@ -237,7 +237,7 @@ class Bilibili(VideoExtractor):
 
         api_url = self.live_api.format(self.room_id)
         json_data = json.loads(get_content(api_url))
-        urls = [json_data['durl'][0]['url']]
+        urls = [json_data['data']['durl'][0]['url']]
 
         self.streams['live'] = {}
         self.streams['live']['src'] = urls
@@ -269,22 +269,9 @@ class Bilibili(VideoExtractor):
             episode_id = frag
         else:
             episode_id = re.search(r'first_ep_id\s*=\s*"(\d+)"', self.page) or re.search(r'\/ep(\d+)', self.url).group(1)
-        # cont = post_content('http://bangumi.bilibili.com/web_api/get_source', post_data=dict(episode_id=episode_id))
-        # cid = json.loads(cont)['result']['cid']
-        cont = get_content('http://bangumi.bilibili.com/web_api/episode/{}.json'.format(episode_id))
-        ep_info = json.loads(cont)['result']['currentEpisode']
-
-        bangumi_data = get_bangumi_info(str(ep_info['seasonId']))
-        bangumi_payment = bangumi_data.get('payment')
-        if bangumi_payment and bangumi_payment['price'] != '0':
-            log.w("It's a paid item")
-        # ep_ids = collect_bangumi_epids(bangumi_data)
-
-        index_title = ep_info['indexTitle']
-        long_title = ep_info['longTitle'].strip()
-        cid = ep_info['danmaku']
-
-        self.title = '{} [{} {}]'.format(self.title, index_title, long_title)
+        data = json.loads(re.search(r'__INITIAL_STATE__=(.+);\(function', self.page).group(1))
+        cid = data['epInfo']['cid']
+        # index_title = data['epInfo']['index_title']
         self.download_by_vid(cid, bangumi=True, **kwargs)
 
 
@@ -388,6 +375,31 @@ def download_video_from_favlist(url, **kwargs):
     else:
         log.wtf("Fail to parse the fav title" + url, "")
 
+def download_video_from_totallist(url, page, **kwargs):
+    # the url has format: https://space.bilibili.com/64169458/#/video
+    m = re.search(r'space\.bilibili\.com/(\d+)/.*?video', url)
+    mid = ""
+    if m is not None:
+        mid = m.group(1)
+        jsonresult = json.loads(get_content("https://space.bilibili.com/ajax/member/getSubmitVideos?mid={}&pagesize=100&tid=0&page={}&keyword=&order=pubdate&jsonp=jsonp".format(mid, page)))
+        if jsonresult['status']:
+            videos = jsonresult['data']['vlist']
+            videocount = len(videos)
+            for i in range(videocount):
+                videoid = videos[i]["aid"]
+                videotitle = videos[i]["title"]
+                videourl = "https://www.bilibili.com/video/av{}".format(videoid)
+                print("Start downloading ", videotitle, " video ", videotitle)
+                Bilibili().download_by_url(videourl, subtitle=videotitle, **kwargs)
+            if page < jsonresult['data']['pages']:
+                page += 1
+                download_video_from_totallist(url, page, **kwargs)
+        else:
+            log.wtf("Fail to get the files of page " + jsonresult)
+            sys.exit(2)
+
+    else:
+        log.wtf("Fail to parse the video title" + url, "")
 
 def bilibili_download_playlist_by_url(url, **kwargs):
     url = url_locations([url], faker=True)[0]
@@ -407,6 +419,8 @@ def bilibili_download_playlist_by_url(url, **kwargs):
     elif 'favlist' in url:
         # this a fav list folder
         download_video_from_favlist(url, **kwargs)
+    elif re.match(r'https?://space.bilibili.com/\d+/#/video', url):
+        download_video_from_totallist(url, 1, **kwargs)
     else:
         aid = re.search(r'av(\d+)', url).group(1)
         page_list = json.loads(get_content('http://www.bilibili.com/widget/getPageList?aid={}'.format(aid)))
